@@ -1,0 +1,24 @@
+{
+  "name": "web",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {
+    "@ai-sdk/google": "^2.0.46",
+    "@ai-sdk/react": "^2.0.114",
+    "@google/generative-ai": "^0.24.1",
+    "ai": "^5.0.112",
+    "clsx": "^2.1.1",
+    "firebase-admin": "^13.6.0",
+    "lucide-react": "^0.560.0",
+    "next": "16.0.10",
+    "react": "19.2.1",
+    "react-dom": "19.2.1",
+    "tailwind-merge": "^3.4.0",
+    "firebase-frameworks": "^0.11.0",
+    "firebase-functions": "^6.0.1"
+  },
+  "main": "server.js",
+  "engines": {
+    "node": "22"
+  }
+}

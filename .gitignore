@@ -1,0 +1,12 @@
+node_modules
+.next
+.env
+.env.local
+.DS_Store
+serviceAccountKey.json
+.gemini
+dist
+build
+.vercel
+firebase.json
+.firebaserc
