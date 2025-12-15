@@ -15,9 +15,6 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "CopyTherapist | Your Creative Muse",
   description: "감성 한 스푼, 위로 두 스푼. 당신만의 카피라이팅 뮤즈 CopyTherapist.",
-  icons: {
-    icon: '/bot_character.jpg',
-  },
 };
 
 export default function RootLayout({
