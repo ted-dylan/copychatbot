@@ -1,7 +1,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Sparkles, Copy, Check, ExternalLink, Edit3, RefreshCw, History, Trash2, Clock } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { Sparkles, Copy, Check, ExternalLink, Edit3, RefreshCw, History, Trash2, Clock, Settings, Key, LogOut, Loader2, Lock } from 'lucide-react';
+import Link from 'next/link';
+import { useAuth } from '@/components/AuthProvider';
+import { getUserProfile } from '@/lib/profile';
 
 // ========== Types ==========
 interface PlatformContent {
@@ -524,17 +528,174 @@ function TopicRecommendations({ onSelectTopic }: { onSelectTopic: (topic: string
 
 // ========== Main App ==========
 export default function AutomationPage() {
+  const router = useRouter();
+  const { user, isLoading: authLoading, signOut } = useAuth();
   const [topic, setTopic] = useState('');
   const [selectedTone, setSelectedTone] = useState<ToneType>('emotional');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [generatedContent, setGeneratedContent] = useState<GeneratedContent | null>(null);
   const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [apiKey, setApiKey] = useState<string | null>(null);
+  const [needsApiKey, setNeedsApiKey] = useState(false);
+  const [isSubscribed, setIsSubscribed] = useState<boolean | null>(null);
+  const [profileLoading, setProfileLoading] = useState(true);
 
-  // Load history on mount
+  // Invitation code state
+  const [inviteCode, setInviteCode] = useState('');
+  const [codeError, setCodeError] = useState<string | null>(null);
+  const [codeLoading, setCodeLoading] = useState(false);
+  const [codeSuccess, setCodeSuccess] = useState(false);
+
+  // Redirect to login if not authenticated
   useEffect(() => {
-    setHistory(getHistory());
-  }, []);
+    if (!authLoading && !user) {
+      router.push('/login');
+    }
+  }, [authLoading, user, router]);
+
+  // Load profile, history and API key on mount
+  useEffect(() => {
+    if (user) {
+      setHistory(getHistory());
+
+      // Load profile from Supabase
+      getUserProfile(user.id).then((profile) => {
+        if (profile) {
+          setApiKey(profile.gemini_api_key);
+          setIsSubscribed(profile.is_subscribed);
+        } else {
+          setIsSubscribed(false);
+        }
+        setProfileLoading(false);
+      });
+    }
+  }, [user]);
+
+  // Define handlers before early returns
+  const handleSignOut = async () => {
+    await signOut();
+    router.push('/login');
+  };
+
+  // Show loading while checking auth or profile
+  if (authLoading || profileLoading) {
+    return (
+      <div className="min-h-screen bg-[#0a0a0c] flex items-center justify-center">
+        <Loader2 className="w-8 h-8 text-purple-400 animate-spin" />
+      </div>
+    );
+  }
+
+  // Don't render if not authenticated (will redirect)
+  if (!user) {
+    return null;
+  }
+
+
+
+  const handleRedeemCode = async () => {
+    if (!inviteCode.trim() || !user) return;
+
+    setCodeLoading(true);
+    setCodeError(null);
+
+    try {
+      const response = await fetch('/api/redeem-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: inviteCode.trim(), userId: user.id }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || '코드 등록에 실패했습니다');
+      }
+
+      setCodeSuccess(true);
+      // Refresh the page after 1.5 seconds
+      setTimeout(() => {
+        window.location.reload();
+      }, 1500);
+    } catch (err: any) {
+      setCodeError(err.message);
+    } finally {
+      setCodeLoading(false);
+    }
+  };
+
+  // Admin emails bypass subscription check
+  const ADMIN_EMAILS = ['totalointernational@gmail.com'];
+  const isAdmin = user && ADMIN_EMAILS.includes(user.email || '');
+
+  // Show subscription required screen for non-subscribers (admins bypass)
+  if (!isSubscribed && !isAdmin) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex items-center justify-center px-4">
+        <div className="fixed inset-0 pointer-events-none overflow-hidden">
+          <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-purple-600/10 blur-[150px] rounded-full"></div>
+          <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-cyan-500/10 blur-[150px] rounded-full"></div>
+        </div>
+
+        <div className="relative z-10 text-center max-w-md w-full">
+          <div className="p-4 bg-purple-600/20 rounded-full w-20 h-20 mx-auto mb-6 flex items-center justify-center">
+            <Lock className="w-10 h-10 text-purple-400" />
+          </div>
+          <h1 className="text-3xl font-bold text-white mb-4">구독이 필요합니다</h1>
+          <p className="text-purple-300/70 mb-8">
+            CopyTherapist를 이용하려면 구독이 필요합니다.<br />
+            크몽에서 구매 후 받은 초대 코드를 입력해주세요!
+          </p>
+
+          {/* Invitation Code Input */}
+          <div className="bg-white/5 backdrop-blur-sm rounded-2xl border border-white/10 p-6 mb-4">
+            <label className="block text-sm text-purple-300 mb-2 text-left">초대 코드</label>
+            <input
+              type="text"
+              value={inviteCode}
+              onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
+              placeholder="코드를 입력하세요"
+              disabled={codeLoading || codeSuccess}
+              className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-purple-500/50 font-mono text-center text-lg tracking-widest uppercase disabled:opacity-50"
+            />
+
+            {codeError && (
+              <p className="mt-2 text-red-400 text-sm">{codeError}</p>
+            )}
+
+            {codeSuccess && (
+              <p className="mt-2 text-green-400 text-sm">✅ 구독이 활성화되었습니다! 잠시 후 새로고침됩니다...</p>
+            )}
+
+            <button
+              onClick={handleRedeemCode}
+              disabled={!inviteCode.trim() || codeLoading || codeSuccess}
+              className="w-full mt-4 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-bold rounded-xl hover:from-purple-500 hover:to-indigo-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              {codeLoading ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  확인 중...
+                </>
+              ) : codeSuccess ? (
+                '활성화 완료!'
+              ) : (
+                '코드 등록'
+              )}
+            </button>
+          </div>
+
+          <button
+            onClick={handleSignOut}
+            className="w-full py-3 bg-white/5 text-white/60 rounded-xl hover:bg-white/10 transition-colors"
+          >
+            로그아웃
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   const handleSelectTopic = (selectedTopic: string) => {
     setTopic(selectedTopic);
@@ -552,13 +713,18 @@ export default function AutomationPage() {
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topic: topic.trim(), tone: selectedTone }),
+        body: JSON.stringify({ topic: topic.trim(), tone: selectedTone, apiKey }),
       });
 
       if (!response.ok) {
         const errorData = await response.json();
+        if (errorData.needsApiKey) {
+          setNeedsApiKey(true);
+        }
         throw new Error(errorData.error || 'Failed to generate content');
       }
+
+      setNeedsApiKey(false);
 
       const data = await response.json();
       setGeneratedContent(data);
@@ -609,6 +775,50 @@ export default function AutomationPage() {
       </div>
 
       <div className="relative z-10 max-w-6xl mx-auto px-4 py-8">
+        {/* Settings & Logout Buttons - Fixed Top Right */}
+        <div className="fixed top-4 right-4 z-50 flex items-center gap-2">
+          {/* Admin Button - only for admin */}
+          {isAdmin && (
+            <Link
+              href="/admin"
+              className="flex items-center gap-2 px-4 py-2 bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/30 rounded-full transition-colors"
+            >
+              <span className="text-sm text-purple-300">🛡️ 관리자</span>
+            </Link>
+          )}
+          <Link
+            href="/settings"
+            className="flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-full transition-colors"
+          >
+            <Settings size={16} className="text-purple-400" />
+            <span className="text-sm text-white/60">설정</span>
+            {apiKey && <span className="w-2 h-2 bg-green-500 rounded-full"></span>}
+          </Link>
+          <button
+            onClick={handleSignOut}
+            className="flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-red-500/20 border border-white/10 hover:border-red-500/30 rounded-full transition-colors"
+          >
+            <LogOut size={16} className="text-white/60" />
+            <span className="text-sm text-white/60">로그아웃</span>
+          </button>
+        </div>
+
+        {/* API Key Required Banner - Always show if no API key */}
+        {!apiKey && (
+          <div className="mb-6 p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Key className="w-5 h-5 text-amber-400" />
+              <span className="text-amber-200">⚠️ API 키를 등록하세요! Gemini API 키가 없으면 카피를 생성할 수 없습니다.</span>
+            </div>
+            <Link
+              href="/settings"
+              className="px-4 py-2 bg-amber-500 text-black font-bold rounded-lg hover:bg-amber-400 transition-colors"
+            >
+              키 등록하기
+            </Link>
+          </div>
+        )}
+
         {/* Header */}
         <header className="text-center mb-12">
           <div className="inline-flex items-center gap-2 px-4 py-2 bg-white/5 border border-white/10 rounded-full mb-6">

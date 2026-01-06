@@ -20,7 +20,7 @@ function isRagEnabled(): boolean {
 // Main POST Handler - Platform-specific content generation
 export async function POST(req: Request) {
     try {
-        const { topic, tone = 'emotional' } = await req.json();
+        const { topic, tone = 'emotional', apiKey: clientApiKey } = await req.json();
 
         if (!topic || typeof topic !== 'string') {
             return new Response(JSON.stringify({ error: 'Topic is required' }), {
@@ -93,8 +93,17 @@ ${ragContext ? '8. 위의 [참고할 카피라이팅 표현]을 활용하여 더
 `;
 
         // --- Native Google AI Call ---
-        const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-        if (!apiKey) throw new Error('GOOGLE_GENERATIVE_AI_API_KEY is missing');
+        // BYOK: Client must provide their own API key (no server fallback)
+        if (!clientApiKey) {
+            return new Response(JSON.stringify({
+                error: 'API 키가 필요합니다. 설정 페이지에서 Gemini API 키를 등록해주세요.',
+                needsApiKey: true
+            }), {
+                status: 401,
+                headers: { 'Content-Type': 'application/json' }
+            });
+        }
+        const apiKey = clientApiKey;
 
         const genAI = new GoogleGenerativeAI(apiKey);
         const model = genAI.getGenerativeModel({
